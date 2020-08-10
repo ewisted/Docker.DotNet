@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
+#if !NETSTANDARD2_1
 using Newtonsoft.Json;
+#endif
 
 namespace Docker.DotNet
 {
@@ -32,7 +34,11 @@ namespace Docker.DotNet
                 }
                 else
                 {
+#if NETSTANDARD2_1
+                    items.Add(System.Text.Json.JsonSerializer.Serialize(0));
+#else
                     items.Add(JsonConvert.SerializeObject(e));
+#endif
                 }
             }
 

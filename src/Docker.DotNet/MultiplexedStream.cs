@@ -5,6 +5,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Net.Http.Client;
 
+#if NETSTANDARD2_1
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+#endif
+
 #if !NET45
 using System.Buffers;
 #endif
@@ -21,10 +26,18 @@ namespace Docker.DotNet
 
         const int BufferSize = 81920;
 
+#if NETSTANDARD2_1
+        private static SemaphoreSlim _streamSemaphore;
+#endif
+
         public MultiplexedStream(Stream stream, bool multiplexed)
         {
             _stream = stream;
             _multiplexed = multiplexed;
+
+#if NETSTANDARD2_1
+            _streamSemaphore = new SemaphoreSlim(1, 1);
+#endif
         }
 
         public enum TargetStream
@@ -219,6 +232,72 @@ namespace Docker.DotNet
             }
         }
 
+#if NETSTANDARD2_1
+        public async IAsyncEnumerable<(TargetStream target, string result)> StreamOutputAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+            var peekBuffer = ArrayPool<byte>.Shared.Rent(128);
+
+            try
+            {
+                for (;;)
+                {
+                    await _streamSemaphore.WaitAsync();
+                    if (Peek(peekBuffer, 0, out uint peeked, out uint available, out uint remaining))
+                    {
+                        if (available > 0)
+                        {
+                            TargetStream target = TargetStream.StandardOut;
+                            string output = null;
+                            try
+                            {
+                                var read = await ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                                if (read.EOF)
+                                {
+                                    break;
+                                }
+
+                                target = read.Target;
+                                output = Encoding.UTF8.GetString(buffer, 0, read.Count);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine(ex);
+                                _streamSemaphore.Release();
+                                continue;
+                            }
+
+                             _streamSemaphore.Release();
+                            yield return (target, output);
+                        }
+                        else
+                        {
+                            _streamSemaphore.Release();
+                            await Task.Delay(100);
+                        }
+                    }
+                    else
+                    {
+                        _streamSemaphore.Release();
+                        await Task.Delay(100);
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+                ArrayPool<byte>.Shared.Return(peekBuffer);
+            }
+        }
+
+        public async Task SendInputAsync(string input, CancellationToken cancellationToken)
+        {
+            var bytes = Encoding.UTF8.GetBytes(input);
+            await _streamSemaphore.WaitAsync();
+            await WriteAsync(bytes, 0, bytes.Length, cancellationToken);
+            _streamSemaphore.Release();
+        }
+#endif
         public void Dispose()
         {
             ((IDisposable)_stream).Dispose();

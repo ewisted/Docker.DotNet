@@ -2,7 +2,9 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
+#if !NETSTANDARD2_1
 using Newtonsoft.Json;
+#endif
 
 namespace Docker.DotNet
 {
@@ -17,7 +19,11 @@ namespace Docker.DotNet
         {
             Debug.Assert(o != null);
 
+#if NETSTANDARD2_1
+            return new[] { System.Text.Json.JsonSerializer.Serialize(o) };
+#else
             return new[] { JsonConvert.SerializeObject(o) };
+#endif
         }
     }
 }
