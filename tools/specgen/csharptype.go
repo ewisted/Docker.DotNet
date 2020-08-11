@@ -77,7 +77,20 @@ type CSAttribute struct {
 }
 
 func (a CSAttribute) String() string {
-	s := fmt.Sprintf("[%s", a.Type.Name)
+	var j string
+	if a.Type.Name == "DataMember" {
+		j = "#if NETSTANDARD2_1\n"
+		j += "        [JsonPropertyName("
+		for _, n := range a.NamedArguments {
+			if n.Name == "Name" {
+				j += fmt.Sprintf("\"%s\"", n.Argument.Value)
+			}
+		}
+		j += ")]\n"
+		j += "#else\n"
+	}
+
+	s := fmt.Sprintf("        [%s", a.Type.Name)
 
 	lenA := len(a.Arguments)
 	lenN := len(a.NamedArguments)
@@ -106,7 +119,12 @@ func (a CSAttribute) String() string {
 		s += ")"
 	}
 
-	return s + "]"
+	if a.Type.Name == "DataMember" {
+		j += s + "]\n"
+		return j + "#endif"
+	} else {
+		return s + "]"
+	}
 }
 
 // CSType is a type that represents a C# type.
@@ -170,7 +188,21 @@ func NewModel(name, sourceName string) *CSModelType {
 func (t *CSModelType) Write(w io.Writer) {
 	usings := calcUsings(t)
 	for _, u := range usings {
-		fmt.Fprintf(w, "using %s;\n", u)
+		if u == "System.Runtime.Serialization" {
+			fmt.Fprintf(w, "#if !NETSTANDARD2_1\n")
+			fmt.Fprintf(w, "using %s;\n", u)
+			fmt.Fprintf(w, "#else\n")
+			fmt.Fprintf(w, "using System.Text.Json.Serialization;\n")
+			fmt.Fprintf(w, "#endif\n")
+		} else if u == "Newtonsoft.Json" {
+			fmt.Fprintf(w, "#if !NETSTANDARD2_1\n")
+			fmt.Fprintf(w, "using %s;\n", u)
+			fmt.Fprintf(w, "#else\n")
+			fmt.Fprintf(w, "using System.Text.Json;\n")		
+			fmt.Fprintf(w, "#endif\n")
+		} else {
+			fmt.Fprintf(w, "using %s;\n", u)
+		}
 	}
 
 	fmt.Fprintln(w, "")
@@ -232,7 +264,13 @@ func safeAddUsing(using string, usings []string, added map[string]bool) []string
 
 func writeClass(w io.Writer, t *CSModelType) {
 	for _, a := range t.Attributes {
-		fmt.Fprintf(w, "    %s\n", a)
+		if a.Type.Name == "DataContract" {
+			fmt.Fprintf(w, "#if !NETSTANDARD2_1\n")
+			fmt.Fprintf(w, "    %s\n", strings.Trim(a.String(), " "))
+			fmt.Fprintf(w, "#endif\n")
+		} else {
+			fmt.Fprintf(w, "    %s\n", strings.Trim(a.String(), " "))
+		}
 	}
 
 	fmt.Fprintf(w, "    public class %s // (%s)\n", t.Name, t.SourceName)
@@ -300,7 +338,7 @@ func writeProperties(w io.Writer, properties []CSProperty) {
 	len := len(properties)
 	for i, p := range properties {
 		for _, a := range p.Attributes {
-			fmt.Fprintf(w, "        %s\n", a)
+			fmt.Fprintf(w, "%s\n", a)
 		}
 
 		if p.Type.IsNullable && p.IsOpt {

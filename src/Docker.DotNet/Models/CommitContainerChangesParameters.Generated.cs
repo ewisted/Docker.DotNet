@@ -1,9 +1,15 @@
 using System.Collections.Generic;
+#if !NETSTANDARD2_1
 using System.Runtime.Serialization;
+#else
+using System.Text.Json.Serialization;
+#endif
 
 namespace Docker.DotNet.Models
 {
+#if !NETSTANDARD2_1
     [DataContract]
+#endif
     public class CommitContainerChangesParameters // (main.CommitContainerChangesParameters)
     {
         [QueryStringParameter("container", true)]
@@ -27,7 +33,11 @@ namespace Docker.DotNet.Models
         [QueryStringParameter("pause", false, typeof(BoolQueryStringConverter))]
         public bool? Pause { get; set; }
 
+#if NETSTANDARD2_1
+        [JsonPropertyName("Config")]
+#else
         [DataMember(Name = "Config", EmitDefaultValue = false)]
+#endif
         public Config Config { get; set; }
     }
 }

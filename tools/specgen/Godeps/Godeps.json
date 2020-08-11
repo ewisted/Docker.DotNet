@@ -98,8 +98,8 @@
 		},
 		{
 			"ImportPath": "github.com/docker/go-units",
-			"Comment": "v0.3.1-8-g8a7beac",
-			"Rev": "8a7beacffa3009a9ac66bad506b18ffdd110cf97"
+			"Comment": "v0.4.0",
+			"Rev": "519db1ee28dcc9fd2474ae59fca29a810482bfb1"
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",
