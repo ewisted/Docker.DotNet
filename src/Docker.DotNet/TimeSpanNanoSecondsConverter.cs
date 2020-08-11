@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Buffers;
 using System.Buffers.Text;
+using System.Reflection;
+using System.Globalization;
 #else
 using Newtonsoft.Json;
 #endif
@@ -11,7 +13,41 @@ using Newtonsoft.Json;
 namespace Docker.DotNet
 {
 #if NETSTANDARD2_1
-    internal class TimeSpanNanosecondsConverter : JsonConverter<TimeSpan>
+    internal class TimeSpanNanosecondsConverter : JsonConverterFactory
+    {
+        public override bool CanConvert(Type objectType)
+        {
+            return objectType == typeof(TimeSpan) || objectType == typeof(TimeSpan?);
+        }
+
+        public override JsonConverter CreateConverter(Type objectType, JsonSerializerOptions options)
+        {
+            if (objectType == typeof(TimeSpan))
+            {
+                return (JsonConverter)Activator.CreateInstance(
+                    typeof(TimeSpanNanosecondsConverterInner),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    binder: null,
+                    args: null,
+                    culture: CultureInfo.InvariantCulture);
+            }
+            else if (objectType == typeof(TimeSpan?))
+            {
+                return (JsonConverter)Activator.CreateInstance(
+                    typeof(NullableTimeSpanNanosecondsConverterInner),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    binder: null,
+                    args: null,
+                    culture: CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                return null;
+            }
+        }
+    }
+
+    internal class TimeSpanNanosecondsConverterInner : JsonConverter<TimeSpan>
     {
         const int MilliSecondToNanoSecond = 1000000;
         public override void Write(Utf8JsonWriter writer, TimeSpan value, JsonSerializerOptions serializerOptions)
@@ -37,6 +73,36 @@ namespace Docker.DotNet
                 return default(TimeSpan);
             }
         }
+    }
+
+    internal class NullableTimeSpanNanosecondsConverterInner : JsonConverter<TimeSpan?>
+    {
+        const int MilliSecondToNanoSecond = 1000000;
+        public override void Write(Utf8JsonWriter writer, TimeSpan? value, JsonSerializerOptions serializerOptions)
+        {
+            var timeSpan = value as TimeSpan?;
+            if (timeSpan == null)
+            {
+                return;
+            }
+
+            writer.WriteNumberValue(timeSpan.Value.TotalMilliseconds * MilliSecondToNanoSecond);
+        }
+
+        public override TimeSpan? Read(ref Utf8JsonReader reader, Type objectType, JsonSerializerOptions serializerOptions)
+        {
+            ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
+            if (Utf8Parser.TryParse(span, out long valueInNanoSeconds, out int bytesConsumed) && span.Length == bytesConsumed)
+            {
+                var milliSecondValue = valueInNanoSeconds / MilliSecondToNanoSecond;
+                return TimeSpan.FromMilliseconds(milliSecondValue);
+            }
+            else
+            {
+                return null;
+            }
+        }
+    }
 #else
     internal class TimeSpanNanosecondsConverter : JsonConverter
     {
@@ -64,10 +130,11 @@ namespace Docker.DotNet
 
             return TimeSpan.FromMilliseconds((long)milliSecondValue);
         }
-#endif
+
         public override bool CanConvert(Type objectType)
         {
             return objectType == typeof(TimeSpan) || objectType == typeof(TimeSpan?);
         }
     }
+#endif
 }
