@@ -15,7 +15,7 @@ namespace Docker.DotNet
     using System.Reflection;
 
 #if NETSTANDARD2_1
-    internal class JsonIso8601AndUnixEpochDateConverter : JsonConverter<DateTime?>
+    internal class JsonIso8601AndUnixEpochDateConverter : JsonConverter<DateTime>
 #else
     internal class JsonIso8601AndUnixEpochDateConverter : JsonConverter
 #endif
@@ -28,12 +28,12 @@ namespace Docker.DotNet
         }
 
 #if NETSTANDARD2_1
-        public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions serializerOptions)
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions serializerOptions)
         {
             throw new NotImplementedException();
         }
 
-        public override DateTime? Read(ref Utf8JsonReader reader, Type objectType, JsonSerializerOptions serializerOptions)
+        public override DateTime Read(ref Utf8JsonReader reader, Type objectType, JsonSerializerOptions serializerOptions)
         {
             var isNullableType = (objectType.GetTypeInfo().IsGenericType && objectType.GetGenericTypeDefinition() == typeof(Nullable<>));
             DateTime result;
@@ -57,7 +57,7 @@ namespace Docker.DotNet
             }
             if (isNullableType && result == default(DateTime))
             {
-                return null; // do not set result on DateTime? field
+                return default(DateTime); // do not set result on DateTime? field
             }
 
             return result;
