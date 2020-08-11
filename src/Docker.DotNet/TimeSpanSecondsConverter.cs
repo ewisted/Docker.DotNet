@@ -12,19 +12,19 @@ using Newtonsoft.Json.Linq;
 namespace Docker.DotNet
 {
 #if NETSTANDARD2_1
-    internal class TimeSpanSecondsConverter : JsonConverter<TimeSpan?>
+    internal class TimeSpanSecondsConverter : JsonConverter<TimeSpan>
     {
-        public override void Write(Utf8JsonWriter writer, TimeSpan? value, JsonSerializerOptions serializerOptions)
+        public override void Write(Utf8JsonWriter writer, TimeSpan value, JsonSerializerOptions serializerOptions)
         {
-            if (!value.HasValue)
+            if (value == default(TimeSpan))
             {
                 return;
             }
 
-            writer.WriteNumberValue((long)value.Value.TotalSeconds);
+            writer.WriteNumberValue((long)value.TotalSeconds);
         }
 
-        public override TimeSpan? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override TimeSpan Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
             if (Utf8Parser.TryParse(span, out long valueInSeconds, out int bytesConsumed) && span.Length == bytesConsumed)
@@ -33,7 +33,7 @@ namespace Docker.DotNet
             }
             else
             {
-                return null;
+                return default(TimeSpan);
             }
         }
 #else

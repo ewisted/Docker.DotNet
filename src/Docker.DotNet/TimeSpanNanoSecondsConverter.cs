@@ -11,20 +11,20 @@ using Newtonsoft.Json;
 namespace Docker.DotNet
 {
 #if NETSTANDARD2_1
-    internal class TimeSpanNanosecondsConverter : JsonConverter<TimeSpan?>
+    internal class TimeSpanNanosecondsConverter : JsonConverter<TimeSpan>
     {
         const int MilliSecondToNanoSecond = 1000000;
-        public override void Write(Utf8JsonWriter writer, TimeSpan? value, JsonSerializerOptions serializerOptions)
+        public override void Write(Utf8JsonWriter writer, TimeSpan value, JsonSerializerOptions serializerOptions)
         {
-            if (!value.HasValue)
+            if (value == default(TimeSpan))
             {
                 return;
             }
 
-            writer.WriteNumberValue(value.Value.TotalMilliseconds * MilliSecondToNanoSecond);
+            writer.WriteNumberValue(value.TotalMilliseconds * MilliSecondToNanoSecond);
         }
 
-        public override TimeSpan? Read(ref Utf8JsonReader reader, Type objectType, JsonSerializerOptions serializerOptions)
+        public override TimeSpan Read(ref Utf8JsonReader reader, Type objectType, JsonSerializerOptions serializerOptions)
         {
             ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
             if (Utf8Parser.TryParse(span, out long valueInNanoSeconds, out int bytesConsumed) && span.Length == bytesConsumed)
@@ -34,7 +34,7 @@ namespace Docker.DotNet
             }
             else
             {
-                return null;
+                return default(TimeSpan);
             }
         }
 #else
