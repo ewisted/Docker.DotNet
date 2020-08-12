@@ -63,17 +63,17 @@ namespace Docker.DotNet
             DateTime result;
 
             ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
-            if (reader.TryGetDateTime(out DateTime dateTimeValue))
+            if (reader.TokenType == JsonTokenType.Number && Utf8Parser.TryParse(span, out long longValue, out int bytesConsumed) && span.Length == bytesConsumed)
+            {
+                result = UnixEpochBase.AddSeconds(longValue);
+            }
+            else if (reader.TryGetDateTime(out DateTime dateTimeValue))
             {
                 result = dateTimeValue;
             }
             else if (DateTime.TryParse(reader.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime stringValue))
             {
                 result = stringValue;
-            }
-            else if (Utf8Parser.TryParse(span, out long longValue, out int bytesConsumed) && span.Length == bytesConsumed)
-            {
-                result = UnixEpochBase.AddSeconds(longValue);
             }
             else
             {
@@ -98,17 +98,17 @@ namespace Docker.DotNet
             DateTime result;
 
             ReadOnlySpan<byte> span = reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan;
-            if (reader.TryGetDateTime(out DateTime dateTimeValue))
+            if (reader.TokenType == JsonTokenType.Number && Utf8Parser.TryParse(span, out long longValue, out int bytesConsumed) && span.Length == bytesConsumed)
+            {
+                result = UnixEpochBase.AddSeconds(longValue);
+            }
+            else if (reader.TryGetDateTime(out DateTime dateTimeValue))
             {
                 result = dateTimeValue;
             }
             else if (DateTime.TryParse(reader.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime stringValue))
             {
                 result = stringValue;
-            }
-            else if (Utf8Parser.TryParse(span, out long longValue, out int bytesConsumed) && span.Length == bytesConsumed)
-            {
-                result = UnixEpochBase.AddSeconds(longValue);
             }
             else
             {

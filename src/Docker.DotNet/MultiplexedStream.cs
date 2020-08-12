@@ -26,18 +26,14 @@ namespace Docker.DotNet
 
         const int BufferSize = 81920;
 
-#if NETSTANDARD2_1
         private static SemaphoreSlim _streamSemaphore;
-#endif
 
         public MultiplexedStream(Stream stream, bool multiplexed)
         {
             _stream = stream;
             _multiplexed = multiplexed;
 
-#if NETSTANDARD2_1
             _streamSemaphore = new SemaphoreSlim(1, 1);
-#endif
         }
 
         public enum TargetStream
@@ -62,9 +58,12 @@ namespace Docker.DotNet
             }
         }
 
-        public Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        public async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
-            return _stream.WriteAsync(buffer, offset, count, cancellationToken);
+            await _streamSemaphore.WaitAsync();
+            await _stream.WriteAsync(buffer, offset, count, cancellationToken);
+            _streamSemaphore.Release();
+            return;
         }
 
         public bool Peek(byte[] buffer, uint toPeek, out uint peeked, out uint available, out uint remaining)
@@ -92,7 +91,9 @@ namespace Docker.DotNet
             {
                 for (var i = 0; i < _header.Length;)
                 {
+                    await _streamSemaphore.WaitAsync();
                     var n = await _stream.ReadAsync(_header, i, _header.Length - i, cancellationToken).ConfigureAwait(false);
+                    _streamSemaphore.Release();
                     if (n == 0)
                     {
                         if (i == 0)
@@ -236,66 +237,40 @@ namespace Docker.DotNet
         public async IAsyncEnumerable<(TargetStream target, string result)> StreamOutputAsync([EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
-            var peekBuffer = ArrayPool<byte>.Shared.Rent(128);
 
             try
             {
                 for (;;)
                 {
-                    await _streamSemaphore.WaitAsync();
-                    if (Peek(peekBuffer, 0, out uint peeked, out uint available, out uint remaining))
+                    if (Peek(null, 0, out var peeked, out var available, out var remaining))
                     {
-                        if (available > 0)
+                        if (remaining > 0)
                         {
-                            TargetStream target = TargetStream.StandardOut;
-                            string output = null;
-                            try
+                            var result = await ReadOutputAsync(buffer, 0, Math.Min((int)remaining, buffer.Length), cancellationToken).ConfigureAwait(false);
+                            if (result.EOF)
                             {
-                                var read = await ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
-                                if (read.EOF)
-                                {
-                                    break;
-                                }
-
-                                target = read.Target;
-                                output = Encoding.UTF8.GetString(buffer, 0, read.Count);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine(ex);
-                                _streamSemaphore.Release();
-                                continue;
+                                yield break;
                             }
 
-                             _streamSemaphore.Release();
-                            yield return (target, output);
-                        }
-                        else
-                        {
-                            _streamSemaphore.Release();
-                            await Task.Delay(100);
+                            var resultString = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                            if (string.IsNullOrWhiteSpace(resultString)) continue;
+
+                            var lines = resultString.Split(Environment.NewLine);
+                            foreach (var line in lines)
+                            {
+                                if (string.IsNullOrWhiteSpace(line)) continue;
+                                yield return (result.Target, line);
+                            }
+                            continue;
                         }
                     }
-                    else
-                    {
-                        _streamSemaphore.Release();
-                        await Task.Delay(100);
-                    }
+                    await Task.Delay(100);
                 }
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(buffer);
-                ArrayPool<byte>.Shared.Return(peekBuffer);
             }
-        }
-
-        public async Task SendInputAsync(string input, CancellationToken cancellationToken)
-        {
-            var bytes = Encoding.UTF8.GetBytes(input);
-            await _streamSemaphore.WaitAsync();
-            await WriteAsync(bytes, 0, bytes.Length, cancellationToken);
-            _streamSemaphore.Release();
         }
 #endif
         public void Dispose()
